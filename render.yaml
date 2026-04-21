@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: winter-team-bot
+    runtime: node
+    buildCommand: npm install
+    startCommand: node bot.js
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: GUILD1_ID
+        sync: false
+      - key: GUILD2_ID
+        sync: false
+      - key: TICKET_CATEGORY
+        sync: false
+      - key: STAFF_ROLE_STACK1
+        sync: false
+      - key: STAFF_ROLE_STACK2
+        sync: false
+      - key: LOG_CHANNEL_GUILD1
+        sync: false
+      - key: LOG_CHANNEL_GUILD2
+        sync: false
+      - key: MEMBER_ROLE_ID
+        sync: false
+      - key: AUTO_ROLE_ID
+        sync: false
+      - key: STAFF_ROLE_GUILD2
+        sync: false
+      - key: APPEAL_CATEGORY_ID
+        sync: false
