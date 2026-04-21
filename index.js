@@ -226,7 +226,7 @@ async function createTicketMessage(channel) {
     .setTitle('📋 ПОДАТЬ ЗАЯВКУ В КЛАН EU')
     .setDescription(
       `**ТРЕБОВАНИЯ:**\n\n` +
-      `● 3500 часов на аккаунте и более\n● 15+ лет\n● Иметь хороший микрофон\n` +
+      `● 1500 часов на аккаунте и более\n● 15+ лет\n● Иметь хороший микрофон\n` +
       `● Умение слушать коллы и адекватно реагировать на критику\n● Минимум 6 часов стабильного онлайна в день\n\n` +
       `**Статус набора:** ${ticketStatus ? '🟢 Открыт' : '🔴 Закрыт'}\n\nНажмите кнопку ниже, чтобы заполнить анкету.`
     )
@@ -1376,7 +1376,7 @@ client.on('interactionCreate', async interaction => {
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Имя').setPlaceholder('Артём').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(50)),
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('age').setLabel('Возраст (цифры)').setPlaceholder('15').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(3)),
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('steam').setLabel('Steam ссылка').setPlaceholder('https://steamcommunity.com/...').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(200)),
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hours').setLabel('Часы (цифры)').setPlaceholder('3500').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hours').setLabel('Часы (цифры)').setPlaceholder('1500').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10)),
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role').setLabel('Роль').setPlaceholder('Строитель, ПвПшник...').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100))
         );
         
@@ -1762,13 +1762,13 @@ client.on('interactionCreate', async interaction => {
       if (!steam.includes('steamcommunity.com')) return interaction.reply({ content: '❌ Некорректная Steam ссылка!', ephemeral: true });
       if (isNaN(hours)) return interaction.reply({ content: '❌ Часы - только цифры!', ephemeral: true });
       
-      if (hours < 3500) {
+      if (hours < 1500) {
         stats.denied++;
         stats.weekDenied++;
         stats.autoDenied = (stats.autoDenied || 0) + 1;
         
         return interaction.reply({ 
-          embeds: [new EmbedBuilder().setTitle('❌ Отклонено').setDescription(`Часов: ${hours}, нужно: 3500+`).setColor(0xFF0000)], 
+          embeds: [new EmbedBuilder().setTitle('❌ Отклонено').setDescription(`Часов: ${hours}, нужно: 1500+`).setColor(0xFF0000)], 
           ephemeral: true 
         });
       }
