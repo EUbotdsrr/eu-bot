@@ -21,7 +21,6 @@ const deletedChannels = new Collection();
 const activeTickets = new Collection();
 const autoDeleteTimeouts = new Collection();
 const timedOutUsers = new Collection();
-let staffStats = new Collection();
 const invites = new Collection();
 
 // Хранилища для второго функционала
@@ -116,38 +115,6 @@ async function sendLog(guild, embed) {
     console.log('✅ Лог отправлен');
   } catch (error) {
     console.error('❌ Ошибка отправки лога:', error);
-  }
-}
-
-// ========== ОБНОВЛЕНИЕ РОЛИ СТАФФА ==========
-async function updateStaffRole(guild, staffId, acceptedCount) {
-  try {
-    const member = await guild.members.fetch(staffId).catch(() => null);
-    if (!member) return;
-    
-    const roleName = `📋 Принял ${acceptedCount} заявок`;
-    
-    const oldRoles = member.roles.cache.filter(r => r.name.startsWith('📋 Принял '));
-    for (const role of oldRoles.values()) {
-      await member.roles.remove(role).catch(() => {});
-      if (role.members.size === 1) {
-        await role.delete().catch(() => {});
-      }
-    }
-    
-    let newRole = guild.roles.cache.find(r => r.name === roleName);
-    if (!newRole) {
-      newRole = await guild.roles.create({
-        name: roleName,
-        color: 0x3498DB,
-        reason: `Статистика принятых заявок для ${member.user.tag}`
-      });
-    }
-    
-    await member.roles.add(newRole);
-    console.log(`✅ Роль "${roleName}" выдана ${member.user.tag}`);
-  } catch (error) {
-    console.error(`❌ Ошибка обновления роли:`, error);
   }
 }
 
@@ -608,13 +575,24 @@ client.on('channelDelete', async (channel) => {
   }
 });
 
-// ========== ПРИВЕТСТВИЕ ==========
+// ========== ПРИВЕТСТВИЕ И АВТОВЫДАЧА РОЛИ ==========
 client.on('guildMemberAdd', async (member) => {
   try {
     const cfg = getConfig();
     
+    console.log(`👋 Новый участник: ${member.user.tag} на сервере ${member.guild.name}`);
+    
+    // Выдача авто-роли на сервере 1
     if (member.guild.id === cfg.guild1_id && cfg.autoRoleId) {
-      await member.roles.add(cfg.autoRoleId).catch(() => {});
+      const role = member.guild.roles.cache.get(cfg.autoRoleId);
+      if (role) {
+        await member.roles.add(role).catch(err => {
+          console.error(`❌ Ошибка выдачи авто-роли: ${err.message}`);
+        });
+        console.log(`✅ Авто-роль "${role.name}" выдана участнику ${member.user.tag}`);
+      } else {
+        console.log(`⚠️ Роль с ID ${cfg.autoRoleId} не найдена на сервере!`);
+      }
     }
     
     try {
@@ -684,7 +662,7 @@ client.once('ready', async () => {
     await client.application.commands.set([
       // Сервер 1 (тикеты)
       { name: 'ticket', description: '[СЕРВЕР 1] Создать сообщение для подачи заявок' },
-      { name: 'stats', description: '[СЕРВЕР 1] Показать статистику заявок за неделю' },
+      { name: 'stats', description: '[СЕРВЕР 1] Показать статистику заявок' },
       { name: 'unbanall', description: '[СЕРВЕР 1] Разбанить всех забаненных участников' },
       { name: 'save_backup', description: '[СЕРВЕР 1] Сохранить структуру каналов в ГЛОБАЛЬНЫЙ бэкап' },
       { name: 'restore_backup', description: '[СЕРВЕР 1] Восстановить каналы из ГЛОБАЛЬНОГО бэкапа' },
@@ -756,7 +734,6 @@ client.on('interactionCreate', async interaction => {
   
   // ========== КОМАНДЫ СЕРВЕРА 1 ==========
   
-  // /save_backup
   if (interaction.isCommand() && interaction.commandName === 'save_backup') {
     if (!isGuild1) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 1!', ephemeral: true });
     if (!isAdmin) return interaction.reply({ content: '❌ Только для админов!', ephemeral: true });
@@ -774,9 +751,7 @@ client.on('interactionCreate', async interaction => {
             `**Сервер-источник:** ${backupData.sourceGuildName}\n` +
             `**Категорий:** ${backupData.categories.length}\n` +
             `**Каналов:** ${backupData.totalChannels}\n` +
-            `**Сохранено:** ${new Date(backupData.savedAt).toLocaleString('ru-RU')}\n\n` +
-            `✅ **Теперь на ЛЮБОМ сервере используйте:**\n` +
-            `\`/restore_backup\` — чтобы создать эти каналы!`
+            `**Сохранено:** ${new Date(backupData.savedAt).toLocaleString('ru-RU')}`
           )
           .setTimestamp();
         
@@ -789,7 +764,6 @@ client.on('interactionCreate', async interaction => {
     }
   }
   
-  // /restore_backup
   if (interaction.isCommand() && interaction.commandName === 'restore_backup') {
     if (!isGuild1) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 1!', ephemeral: true });
     if (!isAdmin) return interaction.reply({ content: '❌ Только для админов!', ephemeral: true });
@@ -798,7 +772,7 @@ client.on('interactionCreate', async interaction => {
     
     if (!backupData) {
       return interaction.reply({ 
-        content: '❌ Глобальный бэкап не создан!\n\nСначала на сервере-источнике используйте `/save_backup`', 
+        content: '❌ Глобальный бэкап не создан! Сначала используйте /save_backup', 
         ephemeral: true 
       });
     }
@@ -810,14 +784,11 @@ client.on('interactionCreate', async interaction => {
       
       if (result.success) {
         const embed = new EmbedBuilder()
-          .setTitle('✅ КАНАЛЫ ВОССТАНОВЛЕНЫ ИЗ ГЛОБАЛЬНОГО БЭКАПА')
+          .setTitle('✅ КАНАЛЫ ВОССТАНОВЛЕНЫ')
           .setColor(0x00FF00)
           .setDescription(
-            `**Сервер-источник:** ${result.sourceGuildName}\n` +
-            `**Бэкап от:** ${new Date(result.savedAt).toLocaleString('ru-RU')}\n\n` +
             `**Категорий создано:** ${result.categories}\n` +
-            `**Каналов создано:** ${result.channels}\n\n` +
-            `⚠️ Существующие каналы пропущены.`
+            `**Каналов создано:** ${result.channels}`
           )
           .setTimestamp();
         
@@ -830,7 +801,6 @@ client.on('interactionCreate', async interaction => {
     }
   }
   
-  // /backup_info
   if (interaction.isCommand() && interaction.commandName === 'backup_info') {
     if (!isGuild1) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 1!', ephemeral: true });
     if (!isAdmin) return interaction.reply({ content: '❌ Только для админов!', ephemeral: true });
@@ -838,10 +808,7 @@ client.on('interactionCreate', async interaction => {
     const backupData = globalBackup.get('last_backup');
     
     if (!backupData) {
-      return interaction.reply({ 
-        content: '❌ Глобальный бэкап не создан!', 
-        ephemeral: true 
-      });
+      return interaction.reply({ content: '❌ Глобальный бэкап не создан!', ephemeral: true });
     }
     
     const embed = new EmbedBuilder()
@@ -849,17 +816,15 @@ client.on('interactionCreate', async interaction => {
       .setColor(0x3498DB)
       .setDescription(
         `**Сервер-источник:** ${backupData.sourceGuildName}\n` +
-        `**ID сервера:** ${backupData.sourceGuildId}\n` +
-        `**Сохранён:** ${new Date(backupData.savedAt).toLocaleString('ru-RU')}\n` +
         `**Категорий:** ${backupData.categories.length}\n` +
-        `**Каналов всего:** ${backupData.totalChannels}`
+        `**Каналов:** ${backupData.totalChannels}\n` +
+        `**Сохранён:** ${new Date(backupData.savedAt).toLocaleString('ru-RU')}`
       )
       .setTimestamp();
     
     await interaction.reply({ embeds: [embed], ephemeral: true });
   }
   
-  // /deleted_list
   if (interaction.isCommand() && interaction.commandName === 'deleted_list') {
     if (!isGuild1) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 1!', ephemeral: true });
     if (!isAdmin) return interaction.reply({ content: '❌ Только для админов!', ephemeral: true });
@@ -870,7 +835,7 @@ client.on('interactionCreate', async interaction => {
     
     const channels = Array.from(deletedChannels.values());
     const list = channels.slice(0, 20).map((ch, i) => 
-      `**${i + 1}.** ${ch.type === 'text' ? '💬' : ch.type === 'voice' ? '🔊' : '📁'} **${ch.name}** — ${new Date(ch.deletedAt).toLocaleTimeString('ru-RU')}`
+      `**${i + 1}.** ${ch.type === 'text' ? '💬' : ch.type === 'voice' ? '🔊' : '📁'} **${ch.name}**`
     ).join('\n');
     
     const embed = new EmbedBuilder()
@@ -882,7 +847,6 @@ client.on('interactionCreate', async interaction => {
     await interaction.reply({ embeds: [embed], ephemeral: true });
   }
   
-  // /unbanall
   if (interaction.isCommand() && interaction.commandName === 'unbanall') {
     if (!isGuild1) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 1!', ephemeral: true });
     if (!isAdmin) return interaction.reply({ content: '❌ Только для админов!', ephemeral: true });
@@ -912,18 +876,9 @@ client.on('interactionCreate', async interaction => {
     }
   }
   
-  // /stats
   if (interaction.isCommand() && interaction.commandName === 'stats') {
     if (!isGuild1) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 1!', ephemeral: true });
     if (!hasStaff) return interaction.reply({ content: '❌ Нет прав!', ephemeral: true });
-    
-    const sortedStaff = [...staffStats.entries()]
-      .sort((a, b) => b[1].accepted - a[1].accepted)
-      .slice(0, 10);
-    
-    let staffList = sortedStaff.length > 0 
-      ? sortedStaff.map(([id, data]) => `<@${id}> — **${data.accepted}**`).join('\n')
-      : 'Нет данных';
     
     const embed = new EmbedBuilder()
       .setTitle('📊 СТАТИСТИКА ЗА НЕДЕЛЮ')
@@ -932,15 +887,13 @@ client.on('interactionCreate', async interaction => {
         { name: '✅ Принято', value: `${stats.weekAccepted}`, inline: true },
         { name: '❌ Отклонено', value: `${stats.weekDenied}`, inline: true },
         { name: '🤖 Авто-отклонено', value: `${stats.autoDenied || 0}`, inline: true },
-        { name: '🔧 Статус набора', value: ticketStatus ? '🟢 Открыт' : '🔴 Закрыт', inline: true },
-        { name: '👑 Топ стаффа', value: staffList, inline: false }
+        { name: '🔧 Статус набора', value: ticketStatus ? '🟢 Открыт' : '🔴 Закрыт', inline: true }
       )
       .setTimestamp();
     
     await interaction.reply({ embeds: [embed], ephemeral: true });
   }
   
-  // /ticket
   if (interaction.isCommand() && interaction.commandName === 'ticket') {
     if (!isGuild1) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 1!', ephemeral: true });
     if (!isAdmin) return interaction.reply({ content: '❌ Нет прав!', ephemeral: true });
@@ -951,7 +904,6 @@ client.on('interactionCreate', async interaction => {
   
   // ========== КОМАНДЫ СЕРВЕРА 2 ==========
   
-  // /warnpanel
   if (interaction.isCommand() && interaction.commandName === 'warnpanel') {
     if (!isGuild2) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 2!', ephemeral: true });
     if (!hasStaff) return interaction.reply({ content: '❌ У вас нет прав!', ephemeral: true });
@@ -972,7 +924,6 @@ client.on('interactionCreate', async interaction => {
     await interaction.reply({ content: '✅ Панель создана!', ephemeral: true });
   }
   
-  // /leavepanel
   if (interaction.isCommand() && interaction.commandName === 'leavepanel') {
     if (!isGuild2) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 2!', ephemeral: true });
     if (!hasStaff) return interaction.reply({ content: '❌ У вас нет прав!', ephemeral: true });
@@ -989,7 +940,6 @@ client.on('interactionCreate', async interaction => {
     await interaction.reply({ content: `✅ Панель создана в ${targetChannel}!`, ephemeral: true });
   }
   
-  // /event
   if (interaction.isCommand() && interaction.commandName === 'event') {
     if (!isGuild2) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 2!', ephemeral: true });
     
@@ -1088,7 +1038,7 @@ client.on('interactionCreate', async interaction => {
           });
         } else {
           await channel.send({
-            content: `🔔 **Напоминание!** Через 15 минут: **${event.description}**\nПока никто не подтвердил участие.`
+            content: `🔔 **Напоминание!** Через 15 минут: **${event.description}**`
           });
         }
         
@@ -1097,7 +1047,6 @@ client.on('interactionCreate', async interaction => {
     }
   }
   
-  // /warn
   if (interaction.isCommand() && interaction.commandName === 'warn') {
     if (!isGuild2) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 2!', ephemeral: true });
     if (!hasStaff) return interaction.reply({ content: '❌ У вас нет прав!', ephemeral: true });
@@ -1155,7 +1104,6 @@ client.on('interactionCreate', async interaction => {
     }
   }
   
-  // /unwarn
   if (interaction.isCommand() && interaction.commandName === 'unwarn') {
     if (!isGuild2) return interaction.reply({ content: '❌ Эта команда работает только на СЕРВЕРЕ 2!', ephemeral: true });
     if (!hasStaff) return interaction.reply({ content: '❌ У вас нет прав!', ephemeral: true });
@@ -1195,7 +1143,6 @@ client.on('interactionCreate', async interaction => {
   
   // ========== ОБЩИЕ КОМАНДЫ ==========
   
-  // /ping
   if (interaction.isCommand() && interaction.commandName === 'ping') {
     const backup = globalBackup.get('last_backup');
     const sent = await interaction.reply({ content: '🏓 Пинг...', fetchReply: true, ephemeral: true });
@@ -1205,7 +1152,6 @@ client.on('interactionCreate', async interaction => {
     });
   }
   
-  // /uptime
   if (interaction.isCommand() && interaction.commandName === 'uptime') {
     const embed = new EmbedBuilder()
       .setTitle('⏰ ВРЕМЯ РАБОТЫ БОТА')
@@ -1216,7 +1162,6 @@ client.on('interactionCreate', async interaction => {
     await interaction.reply({ embeds: [embed] });
   }
   
-  // /invites
   if (interaction.isCommand() && interaction.commandName === 'invites') {
     await interaction.deferReply({ ephemeral: true });
     
@@ -1252,7 +1197,6 @@ client.on('interactionCreate', async interaction => {
     }
   }
   
-  // /send
   if (interaction.isCommand() && interaction.commandName === 'send') {
     if (!hasStaff) return interaction.reply({ content: '❌ У вас нет прав!', ephemeral: true });
     
@@ -1411,15 +1355,20 @@ client.on('interactionCreate', async interaction => {
         stats.accepted++;
         stats.weekAccepted++;
         
-        const staffId = interaction.user.id;
-        if (!staffStats.has(staffId)) staffStats.set(staffId, { accepted: 0, tag: interaction.user.tag });
-        staffStats.get(staffId).accepted++;
-        
-        await updateStaffRole(guild, staffId, staffStats.get(staffId).accepted);
-        
         // Выдача роли участника
         if (cfg.memberRoleId) {
-          await guild.members.fetch(userId).then(m => m.roles.add(cfg.memberRoleId)).catch(() => {});
+          const member = await guild.members.fetch(userId).catch(() => null);
+          if (member) {
+            const role = guild.roles.cache.get(cfg.memberRoleId);
+            if (role) {
+              await member.roles.add(role).catch(err => {
+                console.error(`❌ Ошибка выдачи роли при принятии: ${err.message}`);
+              });
+              console.log(`✅ Роль "${role.name}" выдана участнику ${member.user.tag} при принятии заявки`);
+            } else {
+              console.log(`⚠️ Роль с ID ${cfg.memberRoleId} не найдена!`);
+            }
+          }
         }
         
         await interaction.update({ embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x00FF00)], components: [] });
